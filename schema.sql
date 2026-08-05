@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS students (
+    roll_number VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    marks INTEGER NOT NULL CHECK (marks >= 0 AND marks <= 100),
+    grade VARCHAR(1) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
