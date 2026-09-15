@@ -3,154 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Studently | Dashboard</title>
+    <title>Studently | College Management</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
-    <!-- Google Fonts & Lucide Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
 
-    <div class="app-shell">
+    <!-- ============ LOGIN VIEW ============ -->
+    <div id="loginView" class="login-wrap">
+        <form id="loginForm" class="login-card">
+            <div class="login-logo"><i data-lucide="graduation-cap"></i></div>
+            <h2>Studently</h2>
+            <p class="login-sub">College Management System</p>
+            <div class="input-group">
+                <i data-lucide="user"></i>
+                <input type="text" id="loginUsername" placeholder="Username" required>
+            </div>
+            <div class="input-group">
+                <i data-lucide="lock"></i>
+                <input type="password" id="loginPassword" placeholder="Password" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block"><i data-lucide="log-in"></i> Login</button>
+            <button type="button" class="link-btn" id="showForgotBtn">Forgot password?</button>
+            <button type="button" class="link-btn" id="showRegisterBtn">New student? Create account</button>
+        </form>
 
-        <!-- Navbar -->
+        <form id="registerForm" class="login-card hidden">
+            <div class="login-logo"><i data-lucide="user-plus"></i></div>
+            <h2>Student Registration</h2>
+            <p class="login-sub">Create your account</p>
+            <div class="input-group">
+                <i data-lucide="user"></i>
+                <input type="text" id="regName" placeholder="Full Name" required>
+            </div>
+            <div class="input-group">
+                <i data-lucide="hash"></i>
+                <input type="text" id="regRoll" placeholder="Roll Number" required>
+            </div>
+            <div class="input-group">
+                <i data-lucide="book-open"></i>
+                <select id="regCourse" class="input select-input"><option value="">Select Course</option></select>
+            </div>
+            <input type="text" id="regBranch" class="input" placeholder="Branch">
+            <input type="number" id="regSemester" class="input" placeholder="Semester" min="1">
+            <div class="input-group">
+                <i data-lucide="at-sign"></i>
+                <input type="email" id="regEmail" placeholder="Email (optional)">
+            </div>
+            <input type="text" id="regPhone" class="input" placeholder="Phone (optional)">
+            <div class="input-group">
+                <i data-lucide="user"></i>
+                <input type="text" id="regUsername" placeholder="Choose a username (login)" required>
+            </div>
+            <div class="input-group">
+                <i data-lucide="lock"></i>
+                <input type="password" id="regPassword" placeholder="Create password (min 4 chars)" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block"><i data-lucide="user-plus"></i> Create Account</button>
+            <button type="button" class="link-btn" id="backToLogin2">Back to login</button>
+        </form>
+
+        <form id="forgotForm" class="login-card hidden">
+            <div class="login-logo"><i data-lucide="key-round"></i></div>
+            <h2>Reset Password</h2>
+            <p class="login-sub">Enter username and a new password</p>
+            <div class="input-group">
+                <i data-lucide="user"></i>
+                <input type="text" id="forgotUsername" placeholder="Username" required>
+            </div>
+            <div class="input-group">
+                <i data-lucide="lock"></i>
+                <input type="password" id="forgotNewPass" placeholder="New Password" required>
+            </div>
+            <button type="submit" class="btn btn-warning btn-block"><i data-lucide="rotate-cw"></i> Reset Password</button>
+            <button type="button" class="link-btn" id="backToLogin">Back to login</button>
+        </form>
+    </div>
+
+    <!-- ============ APP VIEW ============ -->
+    <div id="appView" class="app-shell hidden">
         <header class="app-header">
             <div class="brand">
                 <div class="brand-logo"><i data-lucide="graduation-cap"></i></div>
                 <div class="brand-text">
                     <h1>Studently</h1>
-                    <p>Student Management Platform</p>
+                    <p>College Management Platform</p>
                 </div>
             </div>
             <div class="header-right">
-                <span class="status-pill"><span class="pulse-dot"></span> Live</span>
-                <div class="avatar" title="Admin"><i data-lucide="user"></i></div>
+                <span class="status-pill"><span class="pulse-dot"></span> <span id="roleBadge">Admin</span></span>
+                <div class="avatar" title="Account"><i data-lucide="user"></i></div>
+                <span class="username-label" id="userName">—</span>
+                <button id="logoutBtn" class="btn btn-secondary"><i data-lucide="log-out"></i> Logout</button>
             </div>
         </header>
 
-        <!-- Stats Overview -->
-        <section class="stats-row">
-            <div class="stat-card">
-                <div class="stat-icon blue"><i data-lucide="users"></i></div>
-                <div>
-                    <p class="stat-label">Total Students</p>
-                    <p class="stat-value" id="statTotal">0</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon violet"><i data-lucide="chart-line"></i></div>
-                <div>
-                    <p class="stat-label">Average Marks</p>
-                    <p class="stat-value" id="statAverage">—</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon amber"><i data-lucide="trophy"></i></div>
-                <div>
-                    <p class="stat-label">Top Score</p>
-                    <p class="stat-value" id="statHighest">—</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon green"><i data-lucide="medal"></i></div>
-                <div>
-                    <p class="stat-label">Pass Rate</p>
-                    <p class="stat-value" id="statPass">—</p>
-                </div>
-            </div>
-        </section>
+        <nav id="tabNav" class="tab-nav"></nav>
 
-        <!-- Alert Toast -->
-        <div id="alertBox" class="alert hidden"></div>
-
-        <main class="main-layout">
-            <!-- Left Panel: Form Controls -->
-            <aside class="forms-column">
-                <!-- Add Student Card -->
-                <div class="glass-card">
-                    <div class="card-header">
-                        <span class="card-icon"><i data-lucide="user-plus"></i></span>
-                        <h3>Register Student</h3>
-                    </div>
-                    <form id="addStudentForm">
-                        <div class="input-group">
-                            <i data-lucide="user"></i>
-                            <input type="text" id="addName" placeholder="Full Name" required>
-                        </div>
-                        <div class="input-group">
-                            <i data-lucide="hash"></i>
-                            <input type="text" id="addRoll" placeholder="Roll Number" required>
-                        </div>
-                        <div class="input-group">
-                            <i data-lucide="award"></i>
-                            <input type="number" id="addMarks" placeholder="Marks (0-100)" min="0" max="100" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">
-                            <i data-lucide="plus"></i> Add Student
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Update Marks Card -->
-                <div class="glass-card">
-                    <div class="card-header">
-                        <span class="card-icon"><i data-lucide="pencil"></i></span>
-                        <h3>Update Marks</h3>
-                    </div>
-                    <form id="updateMarksForm">
-                        <div class="input-group">
-                            <i data-lucide="hash"></i>
-                            <input type="text" id="updateRoll" placeholder="Roll Number" required>
-                        </div>
-                        <div class="input-group">
-                            <i data-lucide="chart-line"></i>
-                            <input type="number" id="updateMarks" placeholder="New Marks (0-100)" min="0" max="100" required>
-                        </div>
-                        <button type="submit" class="btn btn-warning">
-                            <i data-lucide="rotate-cw"></i> Update Record
-                        </button>
-                    </form>
-                </div>
-            </aside>
-
-            <!-- Right Panel: Data Table & Search -->
-            <section class="table-column">
-                <div class="glass-card table-card">
-                    <!-- Search & Filter Controls -->
-                    <div class="table-actions">
-                        <div class="search-box">
-                            <i data-lucide="search"></i>
-                            <input type="text" id="searchRoll" placeholder="Search by Roll Number...">
-                        </div>
-                        <div class="button-group">
-                            <button id="searchBtn" class="btn btn-info"><i data-lucide="search"></i> Search</button>
-                            <button id="resetBtn" class="btn btn-secondary"><i data-lucide="rotate-cw"></i> Reset</button>
-                        </div>
-                    </div>
-
-                    <!-- Students Table -->
-                    <div class="table-responsive">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Roll No</th>
-                                    <th>Student Name</th>
-                                    <th>Marks</th>
-                                    <th>Grade</th>
-                                    <th style="text-align: right;">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="studentTableBody">
-                                <!-- Dynamic JS Rows -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-        </main>
+        <main id="content" class="content-area"></main>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <div id="alertBox" class="alert hidden"></div>
+
+    <script src="/static/script.js?v=4"></script>
 </body>
 </html>
+
