@@ -1,5 +1,8 @@
 # Student Management System
 
+**🔴 Live Demo:** [Click Here to View Live Project](https://your-live-link-here.com)  
+*(Replace the link above with your actual deployed live server URL)*
+
 A robust and comprehensive Student Management System built with **FastAPI** and **PostgreSQL**. It provides a full-featured backend API and frontend interface for managing the entire lifecycle of a student's academic journey, including courses, attendance, exams, marks, and fees.
 
 ## Features
