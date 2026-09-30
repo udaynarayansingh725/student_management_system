@@ -1,7 +1,7 @@
 import hashlib
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Header, status
@@ -38,21 +38,33 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # ============================================================
 
 def fetch_all(sql, params=()):
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(sql, params)
-        return cur.fetchall()
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
+    finally:
+        conn.close()
 
 
 def fetch_one(sql, params=()):
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(sql, params)
-        return cur.fetchone()
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchone()
+    finally:
+        conn.close()
 
 
 def execute(sql, params=()):
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(sql, params)
-        return cur.rowcount
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.rowcount
+    finally:
+        conn.close()
 
 
 def hash_password(password):
@@ -71,7 +83,7 @@ def create_token(user_id, role):
     payload = {
         "user_id": user_id,
         "role": role,
-        "exp": datetime.utcnow() + timedelta(days=1),
+        "exp": datetime.now(timezone.utc) + timedelta(days=1),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -156,11 +168,16 @@ def register_student(data: dict):
     except Exception:
         raise HTTPException(status_code=409, detail="Login username already exists")
     try:
+        course_id = data.get("course_id")
+        course_id = int(course_id) if course_id else None
+        semester = data.get("semester")
+        semester = int(semester) if semester else 1
+        
         row = fetch_one(
             """INSERT INTO students (user_id, roll_number, name, email, phone, course_id, branch, semester)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (user_row["id"], roll, name, data.get("email") or None, data.get("phone") or None,
-             data.get("course_id"), data.get("branch", ""), data.get("semester", 1)),
+             course_id, data.get("branch", ""), semester),
         )
     except Exception:
         execute("DELETE FROM users WHERE id = %s", (user_row["id"],))
@@ -225,7 +242,8 @@ def create_course(data: dict, user=Depends(require_roles("admin"))):
     if not name:
         raise HTTPException(status_code=400, detail="Name required")
     code = data.get("code", "").strip() or None
-    duration = data.get("duration", 6)
+    duration = data.get("duration")
+    duration = int(duration) if duration else 6
     row = fetch_one(
         "INSERT INTO courses (name, code, duration_semesters) VALUES (%s, %s, %s) RETURNING id", (name, code, duration)
     )
@@ -234,9 +252,11 @@ def create_course(data: dict, user=Depends(require_roles("admin"))):
 
 @app.put("/api/courses/{course_id}")
 def update_course(course_id: int, data: dict, user=Depends(require_roles("admin"))):
+    duration = data.get("duration")
+    duration = int(duration) if duration else 6
     execute(
         "UPDATE courses SET name = %s, code = %s, duration_semesters = %s WHERE id = %s",
-        (data.get("name", ""), data.get("code", ""), data.get("duration", 6), course_id),
+        (data.get("name", ""), data.get("code", ""), duration, course_id),
     )
     return {"message": "Course updated"}
 
@@ -265,19 +285,33 @@ def create_subject(data: dict, user=Depends(require_roles("admin"))):
     name = data.get("name", "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name required")
+    course_id = data.get("course_id")
+    course_id = int(course_id) if course_id else None
+    semester = data.get("semester")
+    semester = int(semester) if semester else 1
+    teacher_id = data.get("teacher_id")
+    teacher_id = int(teacher_id) if teacher_id else None
+    
     row = fetch_one(
         """INSERT INTO subjects (name, course_id, semester, teacher_id)
            VALUES (%s, %s, %s, %s) RETURNING id""",
-        (name, data.get("course_id"), data.get("semester", 1), data.get("teacher_id")),
+        (name, course_id, semester, teacher_id),
     )
     return {"id": row["id"], "name": name}
 
 
 @app.put("/api/subjects/{subject_id}")
 def update_subject(subject_id: int, data: dict, user=Depends(require_roles("admin"))):
+    course_id = data.get("course_id")
+    course_id = int(course_id) if course_id else None
+    semester = data.get("semester")
+    semester = int(semester) if semester else 1
+    teacher_id = data.get("teacher_id")
+    teacher_id = int(teacher_id) if teacher_id else None
+    
     execute(
         """UPDATE subjects SET name = %s, course_id = %s, semester = %s, teacher_id = %s WHERE id = %s""",
-        (data.get("name", ""), data.get("course_id"), data.get("semester", 1), data.get("teacher_id"), subject_id),
+        (data.get("name", ""), course_id, semester, teacher_id, subject_id),
     )
     return {"message": "Subject updated"}
 
@@ -359,18 +393,24 @@ def search_students(q: str = "", branch: str = "", course_id: str = "", semester
     sql = """SELECT s.*, c.name AS course_name FROM students s
              LEFT JOIN courses c ON s.course_id = c.id WHERE 1=1"""
     params = []
-    if q:
+    if q.strip():
         sql += " AND (s.name ILIKE %s OR s.roll_number ILIKE %s)"
-        params += [f"%{q}%", f"%{q}%"]
-    if branch:
+        params += [f"%{q.strip()}%", f"%{q.strip()}%"]
+    if branch.strip():
         sql += " AND s.branch ILIKE %s"
-        params.append(f"%{branch}%")
-    if course_id:
-        sql += " AND s.course_id = %s"
-        params.append(int(course_id))
-    if semester:
-        sql += " AND s.semester = %s"
-        params.append(int(semester))
+        params.append(f"%{branch.strip()}%")
+    if course_id.strip():
+        try:
+            sql += " AND s.course_id = %s"
+            params.append(int(course_id.strip()))
+        except ValueError:
+            pass
+    if semester.strip():
+        try:
+            sql += " AND s.semester = %s"
+            params.append(int(semester.strip()))
+        except ValueError:
+            pass
     sql += " ORDER BY s.roll_number"
     return fetch_all(sql, params)
 
@@ -391,11 +431,16 @@ def create_student(data: dict, user=Depends(require_roles("admin"))):
     except Exception:
         raise HTTPException(status_code=409, detail="Login username already exists")
     try:
+        course_id = data.get("course_id")
+        course_id = int(course_id) if course_id else None
+        semester = data.get("semester")
+        semester = int(semester) if semester else 1
+        
         row = fetch_one(
             """INSERT INTO students (user_id, roll_number, name, email, phone, course_id, branch, semester, profile_photo)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (user_row["id"], roll, name, data.get("email") or None, data.get("phone") or None,
-             data.get("course_id"), data.get("branch", ""), data.get("semester", 1), data.get("profile_photo")),
+             course_id, data.get("branch", ""), semester, data.get("profile_photo")),
         )
     except Exception:
         execute("DELETE FROM users WHERE id = %s", (user_row["id"],))
@@ -405,11 +450,16 @@ def create_student(data: dict, user=Depends(require_roles("admin"))):
 
 @app.put("/api/students/{student_id}")
 def update_student(student_id: int, data: dict, user=Depends(require_roles("admin", "teacher"))):
+    course_id = data.get("course_id")
+    course_id = int(course_id) if course_id else None
+    semester = data.get("semester")
+    semester = int(semester) if semester else 1
+    
     execute(
         """UPDATE students SET name = %s, email = %s, phone = %s, course_id = %s, branch = %s, semester = %s, profile_photo = %s
            WHERE id = %s""",
         (data.get("name", ""), data.get("email") or None, data.get("phone") or None,
-         data.get("course_id"), data.get("branch", ""), data.get("semester", 1), data.get("profile_photo"), student_id),
+         course_id, data.get("branch", ""), semester, data.get("profile_photo"), student_id),
     )
     return {"message": "Student updated"}
 
@@ -492,9 +542,15 @@ def create_exam(data: dict, user=Depends(require_roles("admin", "teacher"))):
     name = data.get("name", "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name required")
+    subject_id = data.get("subject_id")
+    subject_id = int(subject_id) if subject_id else None
+    total_marks = data.get("total_marks")
+    total_marks = int(total_marks) if total_marks else 100
+    exam_date = data.get("exam_date") or None
+    
     row = fetch_one(
         """INSERT INTO exams (name, subject_id, exam_date, total_marks) VALUES (%s, %s, %s, %s) RETURNING id""",
-        (name, data.get("subject_id"), data.get("exam_date"), data.get("total_marks", 100)),
+        (name, subject_id, exam_date, total_marks),
     )
     return {"id": row["id"], "name": name}
 
@@ -575,11 +631,18 @@ def list_fees(user=Depends(get_current_user)):
 
 @app.post("/api/fees")
 def create_fee(data: dict, user=Depends(require_roles("admin"))):
+    student_id = data.get("student_id")
+    student_id = int(student_id) if student_id else None
+    semester = data.get("semester")
+    semester = int(semester) if semester else 1
+    amount = data.get("amount")
+    amount = int(amount) if amount else 0
+    
     row = fetch_one(
         """INSERT INTO fees (student_id, semester, amount, paid, due_date, paid_on)
            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
-        (data.get("student_id"), data.get("semester", 1), data.get("amount", 0),
-         data.get("paid", False), data.get("due_date"), data.get("paid_on")),
+        (student_id, semester, amount,
+         data.get("paid", False), data.get("due_date") or None, data.get("paid_on") or None),
     )
     return {"id": row["id"]}
 

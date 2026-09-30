@@ -13,5 +13,9 @@ def get_connection():
 def init_db():
     with open(os.path.join(os.path.dirname(__file__), "schema.sql"), "r") as f:
         schema = f.read()
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(schema)
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(schema)
+    finally:
+        conn.close()
